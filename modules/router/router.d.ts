@@ -172,7 +172,7 @@ export namespace Router {
     /** object with matching route from available routes */
     route : RouteParameters
     /** context that was passed to the route */
-    context : object
+    context : any
   }
   interface Page {
     /** Initialized app instance */

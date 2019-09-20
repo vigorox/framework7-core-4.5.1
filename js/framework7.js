@@ -7,7 +7,7 @@
  *
  * Released under the MIT License
  *
- * Released on: September 19, 2019
+ * Released on: September 20, 2019
  */
 
 (function (global, factory) {
@@ -12652,6 +12652,11 @@
 
       var $tabbarEl = $(tabbarEl);
 
+      // paulhsu: make all items in md tabbar without any highlight
+      if ($tabbarEl.hasClass('tabbar-md-no-highlight')) {
+        return;
+      }
+      
       if ($tabbarEl.length === 0 || !($tabbarEl.hasClass('tabbar') || $tabbarEl.hasClass('tabbar-labels'))) { return; }
 
       var $highlightEl = $tabbarEl.find('.tab-link-highlight');

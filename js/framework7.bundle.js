@@ -7,7 +7,7 @@
  *
  * Released under the MIT License
  *
- * Released on: September 19, 2019
+ * Released on: September 20, 2019
  */
 
 (function (global, factory) {
@@ -12652,6 +12652,11 @@
 
       var $tabbarEl = $(tabbarEl);
 
+      // paulhsu: make all items in md tabbar without any highlight
+      if ($tabbarEl.hasClass('tabbar-md-no-highlight')) {
+        return;
+      }
+      
       if ($tabbarEl.length === 0 || !($tabbarEl.hasClass('tabbar') || $tabbarEl.hasClass('tabbar-labels'))) { return; }
 
       var $highlightEl = $tabbarEl.find('.tab-link-highlight');
@@ -20809,7 +20814,11 @@
         range.$el.trigger('range:changed', range, range.value);
         range.emit('local::changed rangeChanged', range, range.value);
       }
-      range.emit('local::change rangeChange', range, range.value);
+      // range.emit('local::change rangeChange', range, range.value);
+      // paulhsu: range:change event only be triggered by manually touching
+      if (byTouchMove) {
+        range.emit('local::change rangeChange', range, range.value);
+      }
       return range;
     };
 
@@ -38312,6 +38321,188 @@
     },
   };
 
+  function svgWheelCircles$1() {
+    var total = 256;
+    var circles = '';
+    for (var i = total; i > 0; i -= 1) {
+      var angle = i * Math.PI / (total / 2);
+      var hue = 360 / total * i;
+      circles += "<circle cx=\"" + (150 - Math.sin(angle) * 125) + "\" cy=\"" + (150 - Math.cos(angle) * 125) + "\" r=\"15\" fill=\"hsl(" + hue + ", 100%, 50%)\"></circle>";
+    }
+    return circles;
+  }
+  var moduleHueWheel = {
+    render: function render() {
+      return ("\n      <div class=\"color-picker-module color-picker-module-wheel\">\n        <div class=\"color-picker-wheel\">\n          <svg viewBox=\"0 0 300 300\" width=\"300\" height=\"300\">" + (svgWheelCircles$1()) + "</svg>\n          <div class=\"color-picker-wheel-handle\"></div>\n        </div>\n      </div>\n    ");
+    },
+    init: function init(self) {
+      var app = self.app;
+
+      var isTouched;
+      var isMoved;
+      var touchStartX;
+      var touchStartY;
+      var touchCurrentX;
+      var touchCurrentY;
+
+      var wheelRect;
+      var wheelIsTouched;
+      var wheelHandleIsTouched;
+
+      var $el = self.$el;
+
+      function setHueFromWheelCoords(x, y) {
+        var wheelCenterX = wheelRect.left + wheelRect.width / 2;
+        var wheelCenterY = wheelRect.top + wheelRect.height / 2;
+        var angleRad = Math.atan2(y - wheelCenterY, x - wheelCenterX);
+        var angleDeg = angleRad * 180 / Math.PI + 90;
+        if (angleDeg < 0) { angleDeg += 360; }
+        angleDeg = 360 - angleDeg;
+        self.setValue({ hue: angleDeg });
+      }
+
+
+      function handleTouchStart(e) {
+        if (isMoved || isTouched) { return; }
+        touchStartX = e.type === 'touchstart' ? e.targetTouches[0].pageX : e.pageX;
+        touchCurrentX = touchStartX;
+        touchStartY = e.type === 'touchstart' ? e.targetTouches[0].pageY : e.pageY;
+        touchCurrentY = touchStartY;
+        var $targetEl = $(e.target);
+        wheelHandleIsTouched = $targetEl.closest('.color-picker-wheel-handle').length > 0;
+        wheelIsTouched = $targetEl.closest('circle').length > 0;
+        if (wheelIsTouched) {
+          wheelRect = $el.find('.color-picker-wheel')[0].getBoundingClientRect();
+          setHueFromWheelCoords(touchStartX, touchStartY);
+        }
+      }
+      function handleTouchMove(e) {
+        if (!(wheelIsTouched || wheelHandleIsTouched)) { return; }
+        touchCurrentX = e.type === 'touchmove' ? e.targetTouches[0].pageX : e.pageX;
+        touchCurrentY = e.type === 'touchmove' ? e.targetTouches[0].pageY : e.pageY;
+        e.preventDefault();
+        if (!isMoved) {
+          // First move
+          isMoved = true;
+          if (wheelHandleIsTouched) {
+            wheelRect = $el.find('.color-picker-wheel')[0].getBoundingClientRect();
+          }
+        }
+        if (wheelIsTouched || wheelHandleIsTouched) {
+          setHueFromWheelCoords(touchCurrentX, touchCurrentY);
+        }
+      }
+      function handleTouchEnd() {
+        isMoved = false;
+        wheelIsTouched = false;
+        wheelHandleIsTouched = false;
+      }
+
+      function handleResize() {
+        self.modules.wheel.update(self);
+      }
+
+      var passiveListener = app.touchEvents.start === 'touchstart' && app.support.passiveListener ? { passive: true, capture: false } : false;
+
+      self.$el.on(app.touchEvents.start, handleTouchStart, passiveListener);
+      app.on('touchmove:active', handleTouchMove);
+      app.on('touchend:passive', handleTouchEnd);
+      app.on('resize', handleResize);
+
+      self.destroyWheelEvents = function destroyWheelEvents() {
+        self.$el.off(app.touchEvents.start, handleTouchStart, passiveListener);
+        app.off('touchmove:active', handleTouchMove);
+        app.off('touchend:passive', handleTouchEnd);
+        app.off('resize', handleResize);
+      };
+    },
+    update: function update(self) {
+      var value = self.value;
+
+      var hsl = value.hsl;
+      var hsb = value.hsb;
+
+      var wheelSize = self.$el.find('.color-picker-wheel')[0].offsetWidth;
+      var wheelHalfSize = wheelSize / 2;
+      var angleRad = value.hue * Math.PI / 180;
+      var handleSize = wheelSize / 6;
+      var handleHalfSize = handleSize / 2;
+      var tX = wheelHalfSize - Math.sin(angleRad) * (wheelHalfSize - handleHalfSize) - handleHalfSize;
+      var tY = wheelHalfSize - Math.cos(angleRad) * (wheelHalfSize - handleHalfSize) - handleHalfSize;
+      self.$el.find('.color-picker-wheel-handle')
+        .css('background-color', ("hsl(" + (hsl[0]) + ", 100%, 50%)"))
+        .transform(("translate(" + tX + "px, " + tY + "px)"));
+    },
+    destroy: function destroy(self) {
+      if (self.destroyWheelEvents) { self.destroyWheelEvents(); }
+      delete self.destroyWheelEvents;
+    },
+  };
+
+  var moduleBrightnessSatuFullSlider = {
+    render: function render(self) {
+      var ref = self.params;
+      var sliderLabel = ref.sliderLabel;
+      var sliderValue = ref.sliderValue;
+      var sliderValueEditable = ref.sliderValueEditable;
+      var brightnessLabelText = ref.brightnessLabelText;
+      return ("\n      <div class=\"color-picker-module color-picker-module-brightness-slider\">\n        <div class=\"color-picker-slider-wrap\">\n          " + (sliderLabel ? ("\n            <div class=\"color-picker-slider-label\">" + brightnessLabelText + "</div>\n          ") : '') + "\n          <div class=\"range-slider color-picker-slider color-picker-slider-brightness\"></div>\n          " + (sliderValue ? ("\n            <div class=\"color-picker-slider-value\">\n              " + (sliderValueEditable ? "\n                <input type=\"number\" step=\"0.1\" min=\"0\" max=\"100\" class=\"color-picker-value-brightness\">\n              " : "\n                <span class=\"color-picker-value-brightness\"></span>\n              ") + "\n            </div>\n          ") : '') + "\n        </div>\n      </div>\n    ");
+    },
+    init: function init(self) {
+      var cnst_saturation = 1.0;
+      
+      self.brightnessRangeSlider = self.app.range.create({
+        el: self.$el.find('.color-picker-slider-brightness'),
+        min: 0,
+        max: 1,
+        step: 0.001,
+        value: 0,
+        on: {
+          change: function change(range, value) {
+            var b = Math.floor(value * 1000) / 1000;
+            self.setValue({ hsb: [self.value.hsb[0], cnst_saturation , b] });
+          },
+        },
+      });
+    },
+    update: function update(self) {
+      var value = self.value;
+      var app = self.app;
+      var ref = self.params;
+      var sliderValue = ref.sliderValue;
+      var sliderValueEditable = ref.sliderValueEditable;
+
+      var hsb = value.hsb;
+
+      self.brightnessRangeSlider.value = hsb[2];
+      self.brightnessRangeSlider.layout();
+
+      var hslCurrent = Utils.colorHsbToHsl(hsb[0], hsb[1], hsb[2]);
+      var hslLeft = Utils.colorHsbToHsl(hsb[0], hsb[1], 0);
+      var hslRight = Utils.colorHsbToHsl(hsb[0], hsb[1], 1);
+
+      self.brightnessRangeSlider.$el[0].style.setProperty(
+        '--f7-range-knob-color',
+        ("hsl(" + (hslCurrent[0]) + ", " + (hslCurrent[1] * 100) + "%, " + (hslCurrent[2] * 100) + "%)")
+      );
+      self.brightnessRangeSlider.$el.find('.range-bar').css(
+        'background-image',
+        ("linear-gradient(" + (app.rtl ? 'to left' : 'to right') + ", hsl(" + (hslLeft[0]) + ", " + (hslLeft[1] * 100) + "%, " + (hslLeft[2] * 100) + "%), hsl(" + (hslRight[0]) + ", " + (hslRight[1] * 100) + "%, " + (hslRight[2] * 100) + "%))")
+      );
+      if (sliderValue && sliderValueEditable) {
+        self.$el.find('input.color-picker-value-brightness').val(("" + (hsb[2] * 1000 / 10)));
+      } else if (sliderValue) {
+        self.$el.find('span.color-picker-value-brightness').text(("" + (hsb[2] * 1000 / 10)));
+      }
+    },
+    destroy: function destroy(self) {
+      if (self.brightnessRangeSlider && self.brightnessRangeSlider.destroy) {
+        self.brightnessRangeSlider.destroy();
+      }
+      delete self.brightnessRangeSlider;
+    },
+  };
+
   var ColorPicker = /*@__PURE__*/(function (Framework7Class) {
     function ColorPicker(app, params) {
       if ( params === void 0 ) params = {};
@@ -38372,7 +38563,9 @@
           'rgb-sliders': moduleRgbSliders,
           'sb-spectrum': moduleSbSpectrum,
           'hs-spectrum': moduleHsSpectrum,
-          'wheel': moduleWheel, // eslint-disable-line
+          'wheel': moduleWheel, // eslint-disable-line,
+          'hue-wheel': moduleHueWheel, // eslint-disable-line,
+          'brightness-satu-full-slider': moduleBrightnessSatuFullSlider // eslint-disable-line,
         },
       });
 
